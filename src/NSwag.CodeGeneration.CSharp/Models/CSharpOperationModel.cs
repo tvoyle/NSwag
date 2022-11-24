@@ -73,7 +73,10 @@ namespace NSwag.CodeGeneration.CSharp.Models
 
             Parameters = parameters
                 .Select(parameter =>
-                    new CSharpParameterModel(parameter.Name, GetParameterVariableName(parameter, _operation.Parameters),
+                    new CSharpParameterModel(
+                        parameter.Name,
+                        GetParameterVariableName(parameter, _operation.Parameters),
+                        GetParameterVariableIdentifier(parameter, _operation.Parameters),
                         ResolveParameterType(parameter), parameter, parameters,
                         _settings.CodeGeneratorSettings,
                         _generator,
@@ -227,6 +230,15 @@ namespace NSwag.CodeGeneration.CSharp.Models
             return ReservedKeywords.Contains(name) ? "@" + name : name;
         }
 
+        /// <summary>Gets the identifier of the parameter variable.</summary>
+        /// <param name="parameter">The parameter.</param>
+        /// <param name="allParameters">All parameters.</param>
+        /// <returns>The parameter variable identifier.</returns>
+        protected string GetParameterVariableIdentifier(OpenApiParameter parameter, IEnumerable<OpenApiParameter> allParameters)
+        {
+            return base.GetParameterVariableName(parameter, allParameters);
+        }
+
         /// <summary>Resolves the type of the parameter.</summary>
         /// <param name="parameter">The parameter.</param>
         /// <returns>The parameter type name.</returns>
@@ -257,7 +269,7 @@ namespace NSwag.CodeGeneration.CSharp.Models
                 }
             }
 
-            if (schema.Type == JsonObjectType.Array && schema.Item.IsBinary)
+            if (schema.Type == JsonObjectType.Array && (schema.Item?.IsBinary ?? false))
             {
                 return "System.Collections.Generic.IEnumerable<FileParameter>";
             }

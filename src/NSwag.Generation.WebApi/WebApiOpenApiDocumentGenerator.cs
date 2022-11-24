@@ -183,7 +183,7 @@ namespace NSwag.Generation.WebApi
                                     Operation = new OpenApiOperation
                                     {
                                         IsDeprecated = method.GetCustomAttribute<ObsoleteAttribute>() != null,
-                                        OperationId = GetOperationId(document, controllerType.Name, method)
+                                        OperationId = GetOperationId(document, controllerType.Name, method, httpMethod)
                                     }
                                 };
 
@@ -240,7 +240,7 @@ namespace NSwag.Generation.WebApi
             // 1. Run from settings
             foreach (var operationProcessor in Settings.OperationProcessors)
             {
-                if (operationProcessor.Process(context)== false)
+                if (operationProcessor.Process(context) == false)
                 {
                     return false;
                 }
@@ -290,7 +290,7 @@ namespace NSwag.Generation.WebApi
                 });
         }
 
-        private string GetOperationId(OpenApiDocument document, string controllerName, MethodInfo method)
+        private string GetOperationId(OpenApiDocument document, string controllerName, MethodInfo method, string httpMethod)
         {
             string operationId;
 
@@ -298,9 +298,23 @@ namespace NSwag.Generation.WebApi
                 .GetCustomAttributes()
                 .FirstAssignableToTypeNameOrDefault("SwaggerOperationAttribute", TypeNameStyle.Name);
 
+            dynamic httpAttribute = null;
+            if (!string.IsNullOrWhiteSpace(httpMethod))
+            {
+                var attributeName = Char.ToUpperInvariant(httpMethod[0]) + httpMethod.Substring(1).ToLowerInvariant();
+                var typeName = string.Format("Microsoft.AspNetCore.Mvc.Http{0}Attribute", attributeName);
+                httpAttribute = method
+                    .GetCustomAttributes()
+                    .FirstAssignableToTypeNameOrDefault(typeName);
+            }
+
             if (swaggerOperationAttribute != null && !string.IsNullOrEmpty(swaggerOperationAttribute.OperationId))
             {
                 operationId = swaggerOperationAttribute.OperationId;
+            }
+            else if (Settings.UseHttpAttributeNameAsOperationId && httpAttribute != null && !string.IsNullOrWhiteSpace(httpAttribute.Name))
+            {
+                operationId = httpAttribute.Name;
             }
             else
             {
@@ -329,7 +343,7 @@ namespace NSwag.Generation.WebApi
             var routeAttributes = GetRouteAttributes(method.GetCustomAttributes()).ToList();
 
             // .NET Core: RouteAttribute on class level
-            var routeAttributeOnClass = GetRouteAttribute(controllerType);
+            var routeAttributesOnClass = GetAllRouteAttributes(controllerType);
             var routePrefixAttribute = GetRoutePrefixAttribute(controllerType);
 
             if (routeAttributes.Any())
@@ -344,7 +358,7 @@ namespace NSwag.Generation.WebApi
                     {
                         httpPaths.Add(routePrefixAttribute.Prefix + "/" + attribute.Template);
                     }
-                    else if (routeAttributeOnClass != null)
+                    else if (routeAttributesOnClass != null)
                     {
                         if (attribute.Template.StartsWith("/"))
                         {
@@ -352,7 +366,10 @@ namespace NSwag.Generation.WebApi
                         }
                         else
                         {
-                            httpPaths.Add(routeAttributeOnClass.Template + "/" + attribute.Template);
+                            foreach (var routeAttributeOnClass in routeAttributesOnClass)
+                            {
+                                httpPaths.Add(routeAttributeOnClass.Template + "/" + attribute.Template);
+                            }
                         }
                     }
                     else
@@ -361,17 +378,23 @@ namespace NSwag.Generation.WebApi
                     }
                 }
             }
-            else if (routePrefixAttribute != null && routeAttributeOnClass != null)
+            else if (routePrefixAttribute != null && routeAttributesOnClass != null)
             {
-                httpPaths.Add(routePrefixAttribute.Prefix + "/" + routeAttributeOnClass.Template);
+                foreach (var routeAttributeOnClass in routeAttributesOnClass)
+                {
+                    httpPaths.Add(routePrefixAttribute.Prefix + "/" + routeAttributeOnClass.Template);
+                }
             }
             else if (routePrefixAttribute != null)
             {
                 httpPaths.Add(routePrefixAttribute.Prefix);
             }
-            else if (routeAttributeOnClass != null)
+            else if (routeAttributesOnClass != null)
             {
-                httpPaths.Add(routeAttributeOnClass.Template);
+                foreach (var routeAttributeOnClass in routeAttributesOnClass)
+                {
+                    httpPaths.Add(routeAttributeOnClass.Template);
+                }
             }
             else
             {
@@ -424,16 +447,16 @@ namespace NSwag.Generation.WebApi
             yield return path;
         }
 
-        private RouteAttributeFacade GetRouteAttribute(Type type)
+        private IEnumerable<RouteAttributeFacade> GetAllRouteAttributes(Type type)
         {
             do
             {
                 var attributes = type.GetTypeInfo().GetCustomAttributes(false).Cast<Attribute>();
 
-                var attribute = GetRouteAttributes(attributes).SingleOrDefault();
-                if (attribute != null)
+                var routeAttributes = GetRouteAttributes(attributes);
+                if (routeAttributes != null && routeAttributes.Any())
                 {
-                    return attribute;
+                    return routeAttributes;
                 }
 
                 type = type.GetTypeInfo().BaseType;
@@ -580,9 +603,18 @@ namespace NSwag.Generation.WebApi
 
             if (acceptVerbsAttribute != null)
             {
-                var httpMethods = acceptVerbsAttribute.HttpMethods is ICollection
-                    ? ((ICollection)acceptVerbsAttribute.HttpMethods).OfType<object>().Select(v => v.ToString().ToLowerInvariant())
-                    : ((IEnumerable<string>)acceptVerbsAttribute.HttpMethods).Select(v => v.ToLowerInvariant());
+                IEnumerable<string> httpMethods = new List<string>();
+
+                if (ObjectExtensions.HasProperty(acceptVerbsAttribute, "HttpMethods"))
+                {
+                    httpMethods = acceptVerbsAttribute.HttpMethods is ICollection
+                        ? ((ICollection)acceptVerbsAttribute.HttpMethods).OfType<object>().Select(v => v.ToString().ToLowerInvariant())
+                        : ((IEnumerable<string>)acceptVerbsAttribute.HttpMethods).Select(v => v.ToLowerInvariant());
+                }
+                else if (ObjectExtensions.HasProperty(acceptVerbsAttribute, "Verbs"))
+                {
+                    httpMethods = ((IEnumerable<string>)acceptVerbsAttribute.Verbs).Select(v => v.ToLowerInvariant());
+                }
 
                 foreach (var verb in httpMethods)
                 {

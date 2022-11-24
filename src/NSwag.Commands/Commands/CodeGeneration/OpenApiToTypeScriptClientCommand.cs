@@ -323,6 +323,13 @@ namespace NSwag.Commands.CodeGeneration
             set { Settings.TypeScriptGeneratorSettings.HandleReferences = value; }
         }
 
+        [Argument(Name = "GenerateTypeCheckFunctions", IsRequired = false, Description = "Generate type check functions (only available when TypeStyle is Interface, default: false).")]
+        public bool GenerateTypeCheckFunctions
+        {
+            get { return Settings.TypeScriptGeneratorSettings.GenerateTypeCheckFunctions; }
+            set { Settings.TypeScriptGeneratorSettings.GenerateTypeCheckFunctions = value; }
+        }
+
         [Argument(Name = "GenerateConstructorInterface", IsRequired = false, Description = "Generate an class interface which is used in the constructor to initialize the class (only available when TypeStyle is Class, default: true).")]
         public bool GenerateConstructorInterface
         {
@@ -366,7 +373,7 @@ namespace NSwag.Commands.CodeGeneration
             set { Settings.QueryNullValue = value; }
         }
 
-        [Argument(Name = "UseAbortSignal", IsRequired = false, Description = "Specifies whether to use the AbortSignal (Fetch template only, default: false).")]
+        [Argument(Name = "UseAbortSignal", IsRequired = false, Description = "Specifies whether to use the AbortSignal (Fetch/Aurelia template only, default: false).")]
         public bool UseAbortSignal
         {
             get { return Settings.UseAbortSignal; }
@@ -387,6 +394,13 @@ namespace NSwag.Commands.CodeGeneration
             set { Settings.TypeScriptGeneratorSettings.InlineNamedAny = value; }
         }
 
+        [Argument(Name = "IncludeHttpContext", IsRequired = false, Description = "Gets a value indicating whether to include the httpContext (Angular template only, default: false).")]
+        public bool IncludeHttpContext
+        {
+            get { return Settings.IncludeHttpContext; }
+            set { Settings.IncludeHttpContext = value; }
+        }
+
         public override async Task<object> RunAsync(CommandLineProcessor processor, IConsoleHost host)
         {
             var code = await RunAsync();
@@ -394,23 +408,19 @@ namespace NSwag.Commands.CodeGeneration
             return code;
         }
 
-        public Task<string> RunAsync()
+        public async Task<string> RunAsync()
         {
-            return Task.Run(async () =>
+            var additionalCode = ExtensionCode ?? string.Empty;
+            if (DynamicApis.FileExists(additionalCode))
             {
-                var additionalCode = ExtensionCode ?? string.Empty;
-                if (DynamicApis.FileExists(additionalCode))
-                {
-                    additionalCode = DynamicApis.FileReadAllText(additionalCode);
-                }
+                additionalCode = DynamicApis.FileReadAllText(additionalCode);
+            }
 
-                Settings.OutputFilePath = OutputFilePath;
-                Settings.TypeScriptGeneratorSettings.ExtensionCode = additionalCode;
+            Settings.TypeScriptGeneratorSettings.ExtensionCode = additionalCode;
 
-                var document = await GetInputSwaggerDocument().ConfigureAwait(false);
-                var clientGenerator = new TypeScriptClientGenerator(document, Settings);
-                return clientGenerator.GenerateFile();
-            });
+            var document = await GetInputSwaggerDocument().ConfigureAwait(false);
+            var clientGenerator = new TypeScriptClientGenerator(document, Settings);
+            return clientGenerator.GenerateFile();
         }
     }
 }

@@ -29,6 +29,12 @@ namespace NSwag.Commands
         /// <summary>.NET 5 app.</summary>
         Net50,
 
+        /// <summary>.NET 6 app.</summary>
+        Net60,
+
+        /// <summary>.NET 7 app.</summary>
+        Net70,
+
         /// <summary>Execute in the same process.</summary>
         Debug
     }
